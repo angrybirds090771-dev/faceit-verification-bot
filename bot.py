@@ -8,7 +8,7 @@ TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
 CHECK_INTERVAL = 300
-STATE_FILE = "state.json"
+STATE_FILE = "/app/data/state.json"
 
 
 def get_faceit_user_id():
