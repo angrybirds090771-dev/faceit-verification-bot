@@ -3,84 +3,21 @@ import time
 import json
 import os
 
+from playwright.sync_api import sync_playwright
+
+
 # ==========================================
 # НАСТРОЙКИ
 # ==========================================
 
-FACEIT_API_KEY = os.environ["FACEIT_API_KEY"]
 FACEIT_NICKNAME = os.environ["FACEIT_NICKNAME"]
 
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
-CHECK_INTERVAL = 300  # проверка каждые 5 минут
+CHECK_INTERVAL = 300  # 5 минут
 
 STATE_FILE = "state.json"
-
-
-# ==========================================
-# FACEIT
-# ==========================================
-
-def get_faceit_player():
-
-    # 1. Находим игрока по никнейму
-    search_url = "https://open.faceit.com/data/v4/search/players"
-
-    headers = {
-        "Authorization": f"Bearer {FACEIT_API_KEY}"
-    }
-
-    params = {
-        "nickname": FACEIT_NICKNAME,
-        "limit": 20
-    }
-
-    response = requests.get(
-        search_url,
-        headers=headers,
-        params=params,
-        timeout=20
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    players = data.get("items", [])
-
-    player_id = None
-
-    for player in players:
-
-        if player.get(
-            "nickname",
-            ""
-        ).lower() == FACEIT_NICKNAME.lower():
-
-            player_id = player.get("player_id")
-            break
-
-    if not player_id:
-        raise Exception(
-            f"Игрок {FACEIT_NICKNAME} не найден"
-        )
-
-    # 2. Получаем полную информацию об игроке
-    player_url = (
-        f"https://open.faceit.com/data/v4/players/"
-        f"{player_id}"
-    )
-
-    response = requests.get(
-        player_url,
-        headers=headers,
-        timeout=20
-    )
-
-    response.raise_for_status()
-
-    return response.json()
 
 
 # ==========================================
@@ -90,8 +27,8 @@ def get_faceit_player():
 def send_telegram_message(text):
 
     url = (
-        f"https://api.telegram.org/"
-        f"bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        f"https://api.telegram.org/bot"
+        f"{TELEGRAM_BOT_TOKEN}/sendMessage"
     )
 
     data = {
@@ -109,140 +46,206 @@ def send_telegram_message(text):
 
 
 # ==========================================
-# СОХРАНЕНИЕ СОСТОЯНИЯ
+# СОСТОЯНИЕ
 # ==========================================
 
 def load_state():
 
     if not os.path.exists(STATE_FILE):
+
         return {
             "verified": False,
             "notification_sent": False
         }
 
-    try:
-        with open(STATE_FILE, "r", encoding="utf-8") as file:
-            return json.load(file)
+    with open(
+        STATE_FILE,
+        "r",
+        encoding="utf-8"
+    ) as f:
 
-    except:
-        return {
-            "verified": False,
-            "notification_sent": False
-        }
+        return json.load(f)
 
 
 def save_state(state):
 
-    with open(STATE_FILE, "w", encoding="utf-8") as file:
-        json.dump(state, file, indent=4)
+    with open(
+        STATE_FILE,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        json.dump(
+            state,
+            f,
+            ensure_ascii=False,
+            indent=2
+        )
 
 
 # ==========================================
-# ПРОВЕРКА ВЕРИФИКАЦИИ
+# ПРОВЕРКА FACEIT BADGE
+# ==========================================
+
+def check_faceit_verification():
+
+    url = (
+        f"https://www.faceit.com/en/players/"
+        f"{FACEIT_NICKNAME}"
+    )
+
+    print(
+        f"[FACEIT] Открываю профиль: "
+        f"{FACEIT_NICKNAME}"
+    )
+
+    with sync_playwright() as p:
+
+        browser = p.chromium.launch(
+            headless=False
+        )
+
+        page = browser.new_page(
+            viewport={
+                "width": 1920,
+                "height": 1080
+            }
+        )
+
+        try:
+
+            page.goto(
+                url,
+                wait_until="domcontentloaded",
+                timeout=60000
+            )
+
+            page.wait_for_timeout(10000)
+
+            verification_icon = page.locator(
+                '[data-testid="verification-icon"]'
+            )
+
+            count = verification_icon.count()
+
+            verified = count > 0
+
+            print(
+                f"[FACEIT] {FACEIT_NICKNAME} | "
+                f"verification icons = {count}"
+            )
+
+            print(
+                f"[FACEIT] verified = {verified}"
+            )
+
+            return verified
+
+        finally:
+
+            browser.close()
+
+
+# ==========================================
+# ОСНОВНАЯ ПРОВЕРКА
 # ==========================================
 
 def check_verification():
 
-    try:
+    state = load_state()
 
-        player = get_faceit_player()
+    verified = check_faceit_verification()
 
-        nickname = player.get(
-            "nickname",
-            FACEIT_NICKNAME
-        )
-
-        verified = player.get(
-            "verified",
-            False
-        )
-
-        state = load_state()
+    if verified:
 
         print(
-            f"[FACEIT] {nickname} | "
-            f"verified = {verified}"
+            "[FACEIT] ✅ Аккаунт "
+            "верифицирован."
         )
 
-        # ==================================
-        # АККАУНТ УЖЕ ВЕРИФИЦИРОВАН
-        # ==================================
+        if not state["notification_sent"]:
 
-        if verified:
+            message = (
+                "🎉 FACEIT\n\n"
+                f"Аккаунт {FACEIT_NICKNAME} "
+                "успешно верифицирован! ✅"
+            )
 
-            # Если уведомление ещё не отправляли
-            if not state["notification_sent"]:
+            print(
+                "[TELEGRAM] Отправляю "
+                "уведомление..."
+            )
 
-                message = (
-                    "🎉 FACEIT\n\n"
-                    f"Аккаунт {nickname} "
-                    "успешно верифицирован! ✅"
-                )
+            send_telegram_message(
+                message
+            )
 
-                send_telegram_message(message)
+            state["notification_sent"] = True
 
-                state["verified"] = True
-                state["notification_sent"] = True
-
-                save_state(state)
-
-                print(
-                    "🔔 Уведомление отправлено!"
-                )
-
-            else:
-
-                print(
-                    "✅ Уже уведомляли. "
-                    "Новое сообщение не отправляем."
-                )
-
-        # ==================================
-        # АККАУНТ ЕЩЁ НЕ ВЕРИФИЦИРОВАН
-        # ==================================
+            print(
+                "[TELEGRAM] ✅ Уведомление "
+                "отправлено."
+            )
 
         else:
 
             print(
-                "⏳ Аккаунт ещё не верифицирован."
+                "[TELEGRAM] Уведомление уже "
+                "было отправлено."
             )
 
-            state["verified"] = False
-
-            save_state(state)
-
-    except Exception as error:
+    else:
 
         print(
-            f"❌ Ошибка: {error}"
+            "[FACEIT] ⏳ Аккаунт ещё "
+            "не верифицирован."
         )
+
+        state["notification_sent"] = False
+
+    state["verified"] = verified
+
+    save_state(state)
 
 
 # ==========================================
 # ЗАПУСК
 # ==========================================
 
-print("================================")
-print(" FACEIT Verification Bot")
-print("================================")
 print()
+print("==========================================")
+print("FACEIT Verification Bot")
+print("==========================================")
 print(
     f"Аккаунт: {FACEIT_NICKNAME}"
 )
 print(
     "Проверка каждые 5 минут."
 )
+print("==========================================")
 print()
+
 
 while True:
 
-    check_verification()
+    try:
 
-    print(
-        "Следующая проверка через "
-        "5 минут..."
-    )
+        check_verification()
+
+    except Exception as e:
+
+        print(
+            "[ERROR]",
+            repr(e)
+        )
 
     print()
+    print(
+        f"Следующая проверка через "
+        f"{CHECK_INTERVAL // 60} минут..."
+    )
+    print()
 
-    time.sleep(CHECK_INTERVAL)
+    time.sleep(
+        CHECK_INTERVAL
+    )
