@@ -79,20 +79,6 @@ def load_state():
             return json.load(f)
     except Exception:
         return None
-    if not os.path.exists(STATE_FILE):
-        return {
-            "verified": False,
-            "notification_sent": False
-        }
-
-    try:
-        with open(STATE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {
-            "verified": False,
-            "notification_sent": False
-        }
 
 
 def save_state(state):
@@ -129,13 +115,35 @@ def check_verification():
 
     verified = verification_level > 0
 
+    # Первый запуск:
+    # сохраняем текущее состояние без отправки уведомления.
+    if state is None:
+        state = {
+            "verified": verified,
+            "notification_sent": verified
+        }
+
+        save_state(state)
+
+        print(
+            "[STATE] Первый запуск: текущее состояние сохранено "
+            "без уведомления.",
+            flush=True
+        )
+
+        return
+
+    previous_verified = state.get("verified", False)
+
     if verified:
         print(
             "[FACEIT] ✅ Аккаунт верифицирован.",
             flush=True
         )
 
-        if not state["notification_sent"]:
+        # Уведомление только при переходе:
+        # НЕ верифицирован → ВЕРИФИЦИРОВАН
+        if not previous_verified:
             message = (
                 "🎉 FACEIT\n\n"
                 f"Аккаунт {FACEIT_NICKNAME} успешно "
