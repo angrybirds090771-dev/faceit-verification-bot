@@ -2,6 +2,8 @@ import requests
 import time
 import json
 import os
+import subprocess
+import platform
 
 from playwright.sync_api import sync_playwright
 
@@ -15,9 +17,42 @@ FACEIT_NICKNAME = os.environ["FACEIT_NICKNAME"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
-CHECK_INTERVAL = 300  # 5 минут
+CHECK_INTERVAL = 300
 
 STATE_FILE = "state.json"
+
+
+# ==========================================
+# LINUX / XVFB
+# ==========================================
+
+xvfb_process = None
+
+if platform.system() == "Linux":
+
+    print("[SYSTEM] Запускаю Xvfb...", flush=True)
+
+    xvfb_process = subprocess.Popen(
+        [
+            "Xvfb",
+            ":99",
+            "-screen",
+            "0",
+            "1920x1080x24",
+            "-ac"
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+    os.environ["DISPLAY"] = ":99"
+
+    time.sleep(2)
+
+    print(
+        "[SYSTEM] Xvfb запущен. DISPLAY=:99",
+        flush=True
+    )
 
 
 # ==========================================
@@ -31,14 +66,12 @@ def send_telegram_message(text):
         f"{TELEGRAM_BOT_TOKEN}/sendMessage"
     )
 
-    data = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": text
-    }
-
     response = requests.post(
         url,
-        data=data,
+        data={
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": text
+        },
         timeout=20
     )
 
@@ -46,7 +79,7 @@ def send_telegram_message(text):
 
 
 # ==========================================
-# СОСТОЯНИЕ
+# STATE
 # ==========================================
 
 def load_state():
@@ -84,7 +117,7 @@ def save_state(state):
 
 
 # ==========================================
-# ПРОВЕРКА FACEIT BADGE
+# FACEIT VERIFICATION BADGE
 # ==========================================
 
 def check_faceit_verification():
@@ -96,13 +129,17 @@ def check_faceit_verification():
 
     print(
         f"[FACEIT] Открываю профиль: "
-        f"{FACEIT_NICKNAME}"
+        f"{FACEIT_NICKNAME}",
+        flush=True
     )
 
     with sync_playwright() as p:
 
         browser = p.chromium.launch(
-            headless=False
+            headless=False,
+            args=[
+                "--disable-dev-shm-usage"
+            ]
         )
 
         page = browser.new_page(
@@ -122,21 +159,23 @@ def check_faceit_verification():
 
             page.wait_for_timeout(10000)
 
-            verification_icon = page.locator(
+            badge = page.locator(
                 '[data-testid="verification-icon"]'
             )
 
-            count = verification_icon.count()
+            count = badge.count()
 
             verified = count > 0
 
             print(
                 f"[FACEIT] {FACEIT_NICKNAME} | "
-                f"verification icons = {count}"
+                f"verification icons = {count}",
+                flush=True
             )
 
             print(
-                f"[FACEIT] verified = {verified}"
+                f"[FACEIT] verified = {verified}",
+                flush=True
             )
 
             return verified
@@ -147,7 +186,7 @@ def check_faceit_verification():
 
 
 # ==========================================
-# ОСНОВНАЯ ПРОВЕРКА
+# ПРОВЕРКА
 # ==========================================
 
 def check_verification():
@@ -159,8 +198,8 @@ def check_verification():
     if verified:
 
         print(
-            "[FACEIT] ✅ Аккаунт "
-            "верифицирован."
+            "[FACEIT] ✅ Аккаунт верифицирован.",
+            flush=True
         )
 
         if not state["notification_sent"]:
@@ -172,33 +211,31 @@ def check_verification():
             )
 
             print(
-                "[TELEGRAM] Отправляю "
-                "уведомление..."
+                "[TELEGRAM] Отправляю уведомление...",
+                flush=True
             )
 
-            send_telegram_message(
-                message
-            )
+            send_telegram_message(message)
 
             state["notification_sent"] = True
 
             print(
-                "[TELEGRAM] ✅ Уведомление "
-                "отправлено."
+                "[TELEGRAM] ✅ Уведомление отправлено.",
+                flush=True
             )
 
         else:
 
             print(
-                "[TELEGRAM] Уведомление уже "
-                "было отправлено."
+                "[TELEGRAM] Уведомление уже отправлялось.",
+                flush=True
             )
 
     else:
 
         print(
-            "[FACEIT] ⏳ Аккаунт ещё "
-            "не верифицирован."
+            "[FACEIT] ⏳ Аккаунт ещё не верифицирован.",
+            flush=True
         )
 
         state["notification_sent"] = False
@@ -209,21 +246,38 @@ def check_verification():
 
 
 # ==========================================
-# ЗАПУСК
+# START
 # ==========================================
 
-print()
-print("==========================================")
-print("FACEIT Verification Bot")
-print("==========================================")
 print(
-    f"Аккаунт: {FACEIT_NICKNAME}"
+    "==========================================",
+    flush=True
 )
+
 print(
-    "Проверка каждые 5 минут."
+    "FACEIT Verification Bot",
+    flush=True
 )
-print("==========================================")
-print()
+
+print(
+    "==========================================",
+    flush=True
+)
+
+print(
+    f"Аккаунт: {FACEIT_NICKNAME}",
+    flush=True
+)
+
+print(
+    "Проверка каждые 5 минут.",
+    flush=True
+)
+
+print(
+    "==========================================",
+    flush=True
+)
 
 
 while True:
@@ -236,16 +290,14 @@ while True:
 
         print(
             "[ERROR]",
-            repr(e)
+            repr(e),
+            flush=True
         )
 
-    print()
     print(
         f"Следующая проверка через "
-        f"{CHECK_INTERVAL // 60} минут..."
+        f"{CHECK_INTERVAL // 60} минут...",
+        flush=True
     )
-    print()
 
-    time.sleep(
-        CHECK_INTERVAL
-    )
+    time.sleep(CHECK_INTERVAL)
