@@ -2,69 +2,61 @@ import requests
 import time
 import json
 import os
-import subprocess
-import platform
-
-from playwright.sync_api import sync_playwright
-
-
-# ==========================================
-# НАСТРОЙКИ
-# ==========================================
 
 FACEIT_NICKNAME = os.environ["FACEIT_NICKNAME"]
-
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
 CHECK_INTERVAL = 300
-
 STATE_FILE = "state.json"
 
 
-# ==========================================
-# LINUX / XVFB
-# ==========================================
+def get_faceit_user_id():
+    url = f"https://www.faceit.com/api/users/v1/nicknames/{FACEIT_NICKNAME}"
 
-xvfb_process = None
-
-if platform.system() == "Linux":
-
-    print("[SYSTEM] Запускаю Xvfb...", flush=True)
-
-    xvfb_process = subprocess.Popen(
-        [
-            "Xvfb",
-            ":99",
-            "-screen",
-            "0",
-            "1920x1080x24",
-            "-ac"
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+    response = requests.get(
+        url,
+        headers={
+            "Accept": "application/json, text/plain, */*"
+        },
+        timeout=30
     )
 
-    os.environ["DISPLAY"] = ":99"
+    response.raise_for_status()
 
-    time.sleep(2)
+    data = response.json()
 
-    print(
-        "[SYSTEM] Xvfb запущен. DISPLAY=:99",
-        flush=True
+    return data["payload"]["id"]
+
+
+def get_verification_status(user_id):
+    url = "https://www.faceit.com/api/user-summary/v2/list"
+
+    response = requests.post(
+        url,
+        json={
+            "ids": [user_id]
+        },
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/plain, */*"
+        },
+        timeout=30
     )
 
+    response.raise_for_status()
 
-# ==========================================
-# TELEGRAM
-# ==========================================
+    data = response.json()
+
+    user = data["payload"][user_id]
+
+    verification_level = user.get("verification_level", 0)
+
+    return verification_level
+
 
 def send_telegram_message(text):
-
-    url = (
-        f"https://api.telegram.org/bot"
-        f"{TELEGRAM_BOT_TOKEN}/sendMessage"
-    )
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
     response = requests.post(
         url,
@@ -72,42 +64,31 @@ def send_telegram_message(text):
             "chat_id": TELEGRAM_CHAT_ID,
             "text": text
         },
-        timeout=20
+        timeout=30
     )
 
     response.raise_for_status()
 
 
-# ==========================================
-# STATE
-# ==========================================
-
 def load_state():
-
     if not os.path.exists(STATE_FILE):
-
         return {
             "verified": False,
             "notification_sent": False
         }
 
-    with open(
-        STATE_FILE,
-        "r",
-        encoding="utf-8"
-    ) as f:
-
-        return json.load(f)
+    try:
+        with open(STATE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {
+            "verified": False,
+            "notification_sent": False
+        }
 
 
 def save_state(state):
-
-    with open(
-        STATE_FILE,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(
             state,
             f,
@@ -116,98 +97,41 @@ def save_state(state):
         )
 
 
-# ==========================================
-# FACEIT VERIFICATION BADGE
-# ==========================================
-
-def check_faceit_verification():
-
-    url = (
-        f"https://www.faceit.com/en/players/"
-        f"{FACEIT_NICKNAME}"
-    )
+def check_verification():
+    state = load_state()
 
     print(
-        f"[FACEIT] Открываю профиль: "
-        f"{FACEIT_NICKNAME}",
+        f"[FACEIT] Проверяю аккаунт {FACEIT_NICKNAME}...",
         flush=True
     )
 
-    with sync_playwright() as p:
+    user_id = get_faceit_user_id()
 
-        browser = p.chromium.launch(
-            headless=False,
-            args=[
-                "--disable-dev-shm-usage"
-            ]
-        )
+    print(
+        f"[FACEIT] User ID: {user_id}",
+        flush=True
+    )
 
-        page = browser.new_page(
-            viewport={
-                "width": 1920,
-                "height": 1080
-            }
-        )
+    verification_level = get_verification_status(user_id)
 
-        try:
+    print(
+        f"[FACEIT] verification_level = {verification_level}",
+        flush=True
+    )
 
-            page.goto(
-                url,
-                wait_until="domcontentloaded",
-                timeout=60000
-            )
-
-            page.wait_for_timeout(10000)
-
-            badge = page.locator(
-                '[data-testid="verification-icon"]'
-            )
-
-            count = badge.count()
-
-            verified = count > 0
-
-            print(
-                f"[FACEIT] {FACEIT_NICKNAME} | "
-                f"verification icons = {count}",
-                flush=True
-            )
-
-            print(
-                f"[FACEIT] verified = {verified}",
-                flush=True
-            )
-
-            return verified
-
-        finally:
-
-            browser.close()
-
-
-# ==========================================
-# ПРОВЕРКА
-# ==========================================
-
-def check_verification():
-
-    state = load_state()
-
-    verified = check_faceit_verification()
+    verified = verification_level > 0
 
     if verified:
-
         print(
             "[FACEIT] ✅ Аккаунт верифицирован.",
             flush=True
         )
 
         if not state["notification_sent"]:
-
             message = (
                 "🎉 FACEIT\n\n"
-                f"Аккаунт {FACEIT_NICKNAME} "
-                "успешно верифицирован! ✅"
+                f"Аккаунт {FACEIT_NICKNAME} успешно "
+                "верифицирован! ✅"
             )
 
             print(
@@ -223,16 +147,13 @@ def check_verification():
                 "[TELEGRAM] ✅ Уведомление отправлено.",
                 flush=True
             )
-
         else:
-
             print(
                 "[TELEGRAM] Уведомление уже отправлялось.",
                 flush=True
             )
 
     else:
-
         print(
             "[FACEIT] ⏳ Аккаунт ещё не верифицирован.",
             flush=True
@@ -245,52 +166,21 @@ def check_verification():
     save_state(state)
 
 
-# ==========================================
-# START
-# ==========================================
-
-print(
-    "==========================================",
-    flush=True
-)
-
-print(
-    "FACEIT Verification Bot",
-    flush=True
-)
-
-print(
-    "==========================================",
-    flush=True
-)
-
-print(
-    f"Аккаунт: {FACEIT_NICKNAME}",
-    flush=True
-)
-
-print(
-    "Проверка каждые 5 минут.",
-    flush=True
-)
-
-print(
-    "==========================================",
-    flush=True
-)
+print("==========================================", flush=True)
+print("FACEIT Verification Bot", flush=True)
+print("==========================================", flush=True)
+print(f"Аккаунт: {FACEIT_NICKNAME}", flush=True)
+print("Проверка каждые 5 минут.", flush=True)
+print("==========================================", flush=True)
 
 
 while True:
-
     try:
-
         check_verification()
 
     except Exception as e:
-
         print(
-            "[ERROR]",
-            repr(e),
+            f"[ERROR] {repr(e)}",
             flush=True
         )
 
