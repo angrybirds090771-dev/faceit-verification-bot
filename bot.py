@@ -72,6 +72,14 @@ def send_telegram_message(text):
 
 def load_state():
     if not os.path.exists(STATE_FILE):
+        return None
+
+    try:
+        with open(STATE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+    if not os.path.exists(STATE_FILE):
         return {
             "verified": False,
             "notification_sent": False
