@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>FACEIT Verification Bot</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #111318;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 800px;
+            text-align: center;
+            padding: 50px 30px;
+        }
+
+        .logo {
+            width: 90px;
+            height: 90px;
+            margin: 0 auto 30px;
+            border-radius: 20px;
+            background: #ff5500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 42px;
+            font-weight: bold;
+        }
+
+        h1 {
+            font-size: 42px;
+            margin: 0 0 15px;
+        }
+
+        .subtitle {
+            font-size: 20px;
+            color: #a7a9b0;
+            line-height: 1.6;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: #1b1e25;
+            border: 1px solid #292d36;
+            border-radius: 16px;
+            padding: 30px;
+            text-align: left;
+            margin-bottom: 30px;
+        }
+
+        .card h2 {
+            margin-top: 0;
+            font-size: 24px;
+        }
+
+        .card p {
+            color: #b8bbc3;
+            line-height: 1.7;
+        }
+
+        .status {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            background: #252932;
+            color: #ffffff;
+            font-weight: bold;
+        }
+
+        footer {
+            color: #666b75;
+            font-size: 14px;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+
+        <div class="logo">F</div>
+
+        <h1>FACEIT Verification Bot</h1>
+
+        <div class="subtitle">
+            A simple notification service for monitoring
+            FACEIT account verification status.
+        </div>
+
+        <div class="card">
+            <h2>About the project</h2>
+
+            <p>
+                FACEIT Verification Bot is a personal automation
+                project designed to check the verification status
+                of a FACEIT account and send a notification when
+                the account becomes verified.
+            </p>
+
+            <div class="status">
+                Verification monitoring service
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>How it works</h2>
+
+            <p>
+                The service periodically checks the verification
+                status of the configured FACEIT account using the
+                official FACEIT API.
+            </p>
+
+            <p>
+                When the account becomes verified, the service
+                sends a notification through Telegram.
+            </p>
+        </div>
+
+        <footer>
+            FACEIT Verification Bot · Personal Project
+        </footer>
+
+    </div>
+
+</body>
+</html>
