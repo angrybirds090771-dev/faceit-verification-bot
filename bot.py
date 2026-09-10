@@ -3,7 +3,12 @@ import time
 import json
 import os
 
-FACEIT_NICKNAME = os.environ["FACEIT_NICKNAME"]
+FACEIT_NICKNAMES = [
+    nickname.strip()
+    for nickname in os.environ["FACEIT_NICKNAMES"].split(",")
+    if nickname.strip()
+]
+
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
@@ -11,8 +16,8 @@ CHECK_INTERVAL = 300
 STATE_FILE = "/app/data/state.json"
 
 
-def get_faceit_user_id():
-    url = f"https://www.faceit.com/api/users/v1/nicknames/{FACEIT_NICKNAME}"
+def get_faceit_user_id(nickname):
+    url = f"https://www.faceit.com/api/users/v1/nicknames/{nickname}"
 
     response = requests.get(
         url,
@@ -50,9 +55,7 @@ def get_verification_status(user_id):
 
     user = data["payload"][user_id]
 
-    verification_level = user.get("verification_level", 0)
-
-    return verification_level
+    return user.get("verification_level", 0)
 
 
 def send_telegram_message(text):
@@ -91,114 +94,120 @@ def save_state(state):
         )
 
 
-def check_verification():
-    state = load_state()
-
+def check_account(nickname, state):
     print(
-        f"[FACEIT] Проверяю аккаунт {FACEIT_NICKNAME}...",
+        f"[FACEIT] Проверяю аккаунт {nickname}...",
         flush=True
     )
 
-    user_id = get_faceit_user_id()
+    user_id = get_faceit_user_id(nickname)
 
     print(
-        f"[FACEIT] User ID: {user_id}",
+        f"[FACEIT] {nickname} | User ID: {user_id}",
         flush=True
     )
 
     verification_level = get_verification_status(user_id)
 
     print(
-        f"[FACEIT] verification_level = {verification_level}",
+        f"[FACEIT] {nickname} | verification_level = "
+        f"{verification_level}",
         flush=True
     )
 
     verified = verification_level > 0
 
-    # Первый запуск:
-    # сохраняем текущее состояние без отправки уведомления.
-    if state is None:
-        state = {
-            "verified": verified,
-            "notification_sent": verified
+    # Новый аккаунт в списке:
+    # запоминаем его текущее состояние без уведомления.
+    if nickname not in state:
+        state[nickname] = {
+            "verified": verified
         }
 
-        save_state(state)
-
         print(
-            "[STATE] Первый запуск: текущее состояние сохранено "
-            "без уведомления.",
+            f"[STATE] {nickname} | Первое добавление. "
+            f"Состояние сохранено без уведомления.",
             flush=True
         )
 
         return
 
-    previous_verified = state.get("verified", False)
+    previous_verified = state[nickname].get("verified", False)
 
     if verified:
         print(
-            "[FACEIT] ✅ Аккаунт верифицирован.",
+            f"[FACEIT] {nickname} | ✅ Аккаунт верифицирован.",
             flush=True
         )
 
-        # Уведомление только при переходе:
-        # НЕ верифицирован → ВЕРИФИЦИРОВАН
+        # Только переход:
+        # НЕ ВЕРИФИЦИРОВАН → ВЕРИФИЦИРОВАН
         if not previous_verified:
             message = (
                 "🎉 FACEIT\n\n"
-                f"Аккаунт {FACEIT_NICKNAME} успешно "
+                f"Аккаунт {nickname} успешно "
                 "верифицирован! ✅"
             )
 
             print(
-                "[TELEGRAM] Отправляю уведомление...",
+                f"[TELEGRAM] {nickname} | Отправляю уведомление...",
                 flush=True
             )
 
             send_telegram_message(message)
 
-            state["notification_sent"] = True
-
             print(
-                "[TELEGRAM] ✅ Уведомление отправлено.",
+                f"[TELEGRAM] {nickname} | ✅ Уведомление отправлено.",
                 flush=True
             )
         else:
             print(
-                "[TELEGRAM] Уведомление уже отправлялось.",
+                f"[TELEGRAM] {nickname} | Уведомление уже отправлялось.",
                 flush=True
             )
 
     else:
         print(
-            "[FACEIT] ⏳ Аккаунт ещё не верифицирован.",
+            f"[FACEIT] {nickname} | ⏳ Ещё не верифицирован.",
             flush=True
         )
 
-        state["notification_sent"] = False
-
-    state["verified"] = verified
-
-    save_state(state)
+    state[nickname]["verified"] = verified
 
 
 print("==========================================", flush=True)
 print("FACEIT Verification Bot", flush=True)
 print("==========================================", flush=True)
-print(f"Аккаунт: {FACEIT_NICKNAME}", flush=True)
+print(
+    f"Аккаунтов для проверки: {len(FACEIT_NICKNAMES)}",
+    flush=True
+)
+
+for nickname in FACEIT_NICKNAMES:
+    print(f"  • {nickname}", flush=True)
+
 print("Проверка каждые 5 минут.", flush=True)
 print("==========================================", flush=True)
 
 
 while True:
-    try:
-        check_verification()
+    state = load_state()
 
-    except Exception as e:
-        print(
-            f"[ERROR] {repr(e)}",
-            flush=True
-        )
+    # Первый запуск
+    if state is None:
+        state = {}
+
+    for nickname in FACEIT_NICKNAMES:
+        try:
+            check_account(nickname, state)
+
+        except Exception as e:
+            print(
+                f"[ERROR] {nickname} | {repr(e)}",
+                flush=True
+            )
+
+    save_state(state)
 
     print(
         f"Следующая проверка через "
