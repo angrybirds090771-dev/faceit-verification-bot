@@ -24,18 +24,20 @@ STATE_FILE = "state.json"
 
 def get_faceit_player():
 
-    url = "https://open.faceit.com/data/v4/search/players"
+    # 1. Находим игрока по никнейму
+    search_url = "https://open.faceit.com/data/v4/search/players"
 
     headers = {
         "Authorization": f"Bearer {FACEIT_API_KEY}"
     }
 
     params = {
-        "nickname": FACEIT_NICKNAME
+        "nickname": FACEIT_NICKNAME,
+        "limit": 20
     }
 
     response = requests.get(
-        url,
+        search_url,
         headers=headers,
         params=params,
         timeout=20
@@ -47,13 +49,38 @@ def get_faceit_player():
 
     players = data.get("items", [])
 
-    for player in players:
-        if player.get("nickname", "").lower() == FACEIT_NICKNAME.lower():
-            return player
+    player_id = None
 
-    raise Exception(
-        f"Игрок {FACEIT_NICKNAME} не найден"
+    for player in players:
+
+        if player.get(
+            "nickname",
+            ""
+        ).lower() == FACEIT_NICKNAME.lower():
+
+            player_id = player.get("player_id")
+            break
+
+    if not player_id:
+        raise Exception(
+            f"Игрок {FACEIT_NICKNAME} не найден"
+        )
+
+    # 2. Получаем полную информацию об игроке
+    player_url = (
+        f"https://open.faceit.com/data/v4/players/"
+        f"{player_id}"
     )
+
+    response = requests.get(
+        player_url,
+        headers=headers,
+        timeout=20
+    )
+
+    response.raise_for_status()
+
+    return response.json()
 
 
 # ==========================================
