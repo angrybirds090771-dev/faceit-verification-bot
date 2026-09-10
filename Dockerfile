@@ -8,4 +8,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY bot.py .
 
-CMD ["xvfb-run", "-a", "python", "bot.py"]
+CMD ["xvfb-run", "-a", "python", "-u", "bot.py"]
